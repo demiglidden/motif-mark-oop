@@ -80,7 +80,6 @@ def find_positions(seq, reggie):
 
     return pos_list
 
-
 ###########
 # Classes #
 ###########
@@ -94,60 +93,81 @@ class FastaHeader:
         self.gene_count = gene_count
 
         #methods
-    def draw(self, context, header, gene_count):
+    def draw(self, context):
         context.set_source_rgba(0, 0, 0, 1)
-        context.move_to(15, int(gene_count)*VERT_PAD + 10)
-        context.show_text(header)
+        context.move_to(15, int(self.gene_count)*VERT_PAD + 10)
+        context.show_text(self.header)
 
 class Gene:
     '''Gene class – A Gene object should be given enough information that it can figure out how to draw itself.'''
     def __init__(self, context, gene, gene_count):
-        '''this is how a gene is made'''
         #data
         self.context = context
         self.gene = gene
         self.gene_count = gene_count
 
         #methods
-    def draw(self, context, gene, gene_count):
+    def draw(self, context):
         '''this method will draw the gene as a horizontal black line, proportional to it's length in nucleotides'''
         context.set_line_width(3)
         context.set_source_rgba(0, 0, 0, 1)
-        context.move_to(15, int(gene_count)*VERT_PAD + 30)
-        context.line_to(15+len(gene), int(gene_count)*VERT_PAD + 30)
+        context.move_to(15, int(self.gene_count)*VERT_PAD + 30)
+        context.line_to(15+len(self.gene), int(self.gene_count)*VERT_PAD + 30)
         context.stroke()
 
 class Exon:
     '''An Exon object stores its start, length, and maybe width, similar to Gene.'''
     def __init__(self, context, coords, gene_count):
-        ''' this is how an exon is made'''
-        #data
+    #data
         self.coords = coords
+        self.gene_count = gene_count
 
     #methods
-    def draw(self, context, coords, gene_count):
+    def draw(self, context):
         '''this method will draw the exon on the gene'''
         context.set_source_rgba(0.23,0.25,0.25, 1)
-        context.rectangle(15+int(coords[0]),int(gene_count)*VERT_PAD+20,int(coords[1])-int(coords[0]),15)        #(x0,y0,x1,y1)
+        context.rectangle(15+int(self.coords[0]),int(self.gene_count)*VERT_PAD+20,int(self.coords[1])-int(self.coords[0]),15)        #(x0,y0,x1,y1)
         context.fill()
 
-class Motif:  
-    '''A Motif object stores its start, length, and maybe width, similar to Gene.'''
-    def __init__(self, context, coords, R, G, B, gene_count):
-        ''' this is how a motif is made'''
-        #data
+class Motifs:  
+    '''A Motifs object stores a list of motif positions along a given gene and can draw them.'''
+    def __init__(self, context, coords_list, R, G, B, gene_count):
+    #data
         self.context = context
-        self.coords = coords
+        self.coords_list = coords_list
+        self.gene_count = gene_count
         self.R = R
-        self.R = G
-        self.R = B
+        self.G = G
+        self.B = B
     
     #methods
-    def draw(self, context, coords, R, G, B, gene_count):
+    def draw(self, context):
         '''this methods will draw rectangles for the motif positions on the gene-line for the coordinates produced by find_positions()'''
-        context.set_source_rgba(float(R),float(G),float(B),.7)
-        context.rectangle(15+int(coords[0]),int(gene_count)*VERT_PAD+20,int(coords[1])-int(coords[0]),15)        #(x0,y0,x1,y1)
-        context.fill()
+        for i in self.coords_list:
+            coords = list(i)
+            context.set_source_rgba(float(self.R),float(self.G),float(self.B),.7)
+            context.rectangle(15+int(coords[0]),int(self.gene_count)*VERT_PAD+20,int(coords[1])-int(coords[0]),15)        #(x0,y0,x1,y1)
+            context.fill()
+
+class GeneGroup:
+    '''A gene group object manages and organizes the information (gene, exon, and motifs) for each fasta record'''
+    def __init__(self):
+        
+    #data
+        self.gene_count = None
+        self.header = None
+        self.gene = None
+        self.exon = None
+        self.motifs = []
+        self.context = None
+    
+    #methods
+    def draw(self, context):
+        self.header.draw(context)
+        self.gene.draw(context)
+        self.exon.draw(context)
+        for i in self.motifs:
+            i.draw(context)
 
 
 
@@ -174,7 +194,7 @@ with open (fasta, "r") as fh:
         seqs.append(gene)
 
 longest_gene = (len(max(seqs, key=len)))
-print(longest_gene)
+
 
 ## figure set up using gene count ##
 VERT_PAD = 50 #this number dictates the space between genes, or the 'vertical padding'
@@ -192,6 +212,8 @@ Bs = ("0.08",".15","1.00","0.06",".83")
 motifs_list = []
 GENE_COUNT = 0
 gene = ''
+GENE_GROUPS = []
+
 with open (fasta, "r") as fh, open (motifs, "r") as mt:
     #extract motifs from file into list
     for line in mt:
@@ -203,14 +225,11 @@ with open (fasta, "r") as fh, open (motifs, "r") as mt:
     for line in fh:
         if line[0] == '>':
             if gene != '':
-                print(len(gene))
                 # gene #
-                geneObj = Gene(context, gene, GENE_COUNT)
-                geneObj.draw(context, gene, GENE_COUNT)
+                group_obj.gene = Gene(context, gene, GENE_COUNT)
                 # exon #
                 coords = find_exon(gene)
-                exonObj = Exon(context, coords, GENE_COUNT)
-                exonObj.draw(context, coords, GENE_COUNT)
+                group_obj.exon = Exon(context, coords, GENE_COUNT)
                 # motifs #
                 itR = iter(Rs)
                 itG = iter(Gs)
@@ -222,27 +241,29 @@ with open (fasta, "r") as fh, open (motifs, "r") as mt:
                     B = next(itB)
                     reggie = get_regex(motif)
                     coords_list = find_positions(gene, reggie)
-                    for i in coords_list:
-                        coords = list(i)
-                        motifObj = Motif(context, coords, R, G, B, GENE_COUNT)
-                        motifObj.draw(context, coords, R, G, B, GENE_COUNT)
+                    group_obj.motifs.append(Motifs(context, coords_list, R, G, B, GENE_COUNT))
+                group_obj.gene_count = GENE_COUNT
+                # add gene group to list
+                GENE_GROUPS.append(group_obj)
+                # reset header and gene seq
+                group_obj = GeneGroup()
+                header = line.strip()
                 GENE_COUNT += 1
+                group_obj.header = FastaHeader(context, header, GENE_COUNT)
                 gene = ''
+            group_obj = GeneGroup()
             header = line.strip()
-            headerObj = FastaHeader(context, header, GENE_COUNT)
-            headerObj.draw(context, header, GENE_COUNT)
+            #group_obj.gene = Gene(context, gene, GENE_COUNT)
+            group_obj.header = FastaHeader(context, header, GENE_COUNT)
+            #GENE_GROUPS.append(group_obj)
         else:
             seq = line.strip()
             gene += seq
     #repeat for last sequence
     # gene #
-    print(len(gene))
-    geneObj = Gene(context, gene, GENE_COUNT)
-    geneObj.draw(context, gene, GENE_COUNT)
-    # exon #
+    group_obj.gene = Gene(context, gene, GENE_COUNT)
     coords = find_exon(gene)
-    exonObj = Exon(context, coords, GENE_COUNT)
-    exonObj.draw(context, coords, GENE_COUNT)
+    group_obj.exon = Exon(context, coords, GENE_COUNT)
     # motifs #
     itR = iter(Rs)
     itG = iter(Gs)
@@ -254,33 +275,36 @@ with open (fasta, "r") as fh, open (motifs, "r") as mt:
         B = next(itB)
         reggie = get_regex(motif)
         coords_list = find_positions(gene, reggie)
-        for i in coords_list:
-            coords = list(i)
-            motifObj = Motif(context, coords, R, G, B, GENE_COUNT)
-            motifObj.draw(context, coords, R, G, B, GENE_COUNT)
+        group_obj.motifs.append(Motifs(context, coords_list, R, G, B, GENE_COUNT))
+        GENE_GROUPS.append(group_obj)
+
+
+
+for gene_group in GENE_GROUPS:
+    gene_group.draw(context,)
+
+#draw legend
+#make motif colors iterable one last time
+itR = iter(Rs)
+itG = iter(Gs)
+itB = iter(Bs)
+motif_counter = 0
+#write "legend"
+context.set_source_rgba(0, 0, 0, 1)
+context.move_to(15,(int(GENE_COUNT)+1)*VERT_PAD+15)
+context.show_text("Legend")
+for i in motifs_list:
+    #call motif color
+    R = next(itR)
+    G = next(itG)
+    B = next(itB)
     #draw legend
-    #make motif colors iterable one last time
-    itR = iter(Rs)
-    itG = iter(Gs)
-    itB = iter(Bs)
-    motif_counter = 0
-    #write "legend"
-    print(GENE_COUNT)
-    context.set_source_rgba(0, 0, 0, 1)
-    context.move_to(15,(int(GENE_COUNT)+1)*VERT_PAD+15)
-    context.show_text("Legend")
-    for i in motifs_list:
-        #call motif color
-        R = next(itR)
-        G = next(itG)
-        B = next(itB)
-        #draw legend
-        context.set_source_rgba(float(R), float(G), float(B), .9)
-        context.rectangle(15,((GENE_COUNT+1)*VERT_PAD)+int(motif_counter+1)*20,40,10)
-        context.fill()
-        #write motif
-        context.move_to(60,((GENE_COUNT+1)*VERT_PAD)+int((motif_counter+1)*20)+10)
-        context.show_text(i)
-        motif_counter += 1
+    context.set_source_rgba(float(R), float(G), float(B), .9)
+    context.rectangle(15,((GENE_COUNT+1)*VERT_PAD)+int(motif_counter+1)*20,40,10)
+    context.fill()
+    #write motif
+    context.move_to(60,((GENE_COUNT+1)*VERT_PAD)+int((motif_counter+1)*20)+10)
+    context.show_text(i)
+    motif_counter += 1
 
 surface.finish() #close svg file
